@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://eve_user:eve_password@postgres:5432/eve_healthcare?schema=public
+      - JWT_SECRET=production-jwt-secret-key-eve-healthcare
+      - JWT_EXPIRES_IN=1d
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: eve_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: eve_user
+      POSTGRES_PASSWORD: eve_password
+      POSTGRES_DB: eve_healthcare
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eve_user -d eve_healthcare"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

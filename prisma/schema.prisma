@@ -1,0 +1,104 @@
+// Prisma Schema for EVE Healthcare
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  bookings  Booking[]
+
+  @@map("users")
+}
+
+model DiagnosticCentre {
+  id        String           @id @default(uuid())
+  name      String
+  location  String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  tests     DiagnosticTest[]
+  bookings  Booking[]
+
+  @@map("diagnostic_centres")
+}
+
+model DiagnosticTest {
+  id        String           @id @default(uuid())
+  centreId  String
+  centre    DiagnosticCentre @relation(fields: [centreId], references: [id], onDelete: Cascade)
+  name      String
+  price     Float
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  bookings  Booking[]
+
+  @@map("diagnostic_tests")
+}
+
+model Booking {
+  id                  String           @id @default(uuid())
+  userId              String
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  testId              String
+  test                DiagnosticTest   @relation(fields: [testId], references: [id], onDelete: Cascade)
+  centreId            String
+  centre              DiagnosticCentre @relation(fields: [centreId], references: [id], onDelete: Cascade)
+  appointmentDatetime DateTime
+  amount              Float
+  status              BookingStatus    @default(PENDING)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  payment             Payment?
+
+  @@map("bookings")
+}
+
+model Payment {
+  id                  String        @id @default(uuid())
+  bookingId           String        @unique
+  booking             Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount              Float
+  status              PaymentStatus
+  providerReferenceId String        @unique
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@map("payments")
+}
+
+model WebhookEvent {
+  id                  String   @id @default(uuid())
+  eventId             String   @unique
+  bookingId           String?
+  providerReferenceId String?
+  status              String
+  payload             Json?
+  processedAt         DateTime @default(now())
+  createdAt           DateTime @default(now())
+
+  @@map("webhook_events")
+}
