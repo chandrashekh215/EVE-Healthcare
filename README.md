@@ -76,3 +76,21 @@ cd backend
 npm test
 ```
 - **30/30 unit & integration tests passing (100% pass rate)**.
+
+---
+
+## 📖 Detailed Backend & API Documentation
+
+For complete, detailed technical documentation, please refer to [**`backend/README.md`**](./backend/README.md):
+
+1. **[API Endpoints & Request/Response Catalog](./backend/README.md#-api-endpoints--example-requests)**
+   - Includes real JSON payloads (matching Zod schemas), success responses, and key HTTP error codes (400, 401, 403, 404, 409) for all 13 API endpoints.
+2. **[Database & Schema Design](./backend/README.md#-database--schema-design)**
+   - All 6 Prisma models (`User`, `DiagnosticCentre`, `DiagnosticTest`, `Booking`, `BookingItem`, `Payment`).
+   - Detailed Mermaid ER Diagram and relationships.
+   - Rationale for **Price Snapshotting**, **Idempotent Webhooks**, and **Concurrency Control**.
+3. **[Important Assumptions](./backend/README.md#-important-assumptions)**
+   - Payment processing simulation rules, authentication & access control policy, booking cancellation rules, and security specifications.
+4. **[What I Would Improve With More Time](./backend/README.md#-what-i-would-improve-with-more-time)**
+   - Asynchronous job queue processing (BullMQ + Redis), Role-Based Access Control (RBAC), JWT Refresh Token rotation, database indexing, and Playwright E2E testing.
+
