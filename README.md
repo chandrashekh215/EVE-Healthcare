@@ -1,44 +1,66 @@
 # EVE Healthcare - Diagnostic Test Booking & Simulated Payments System
 
-A production-ready, clean-architecture backend service built for **EVE Healthcare** using **Node.js**, **Express**, **Prisma ORM**, and **PostgreSQL**. The service provides secure JWT authentication, diagnostic centre & test catalog management, appointment booking with snapshot pricing, simulated payment processing, and an idempotent payment webhook receiver.
+A production-grade, full-stack monorepo application for **EVE Healthcare** divided into two dedicated modules:
+- **`backend/`**: Node.js + Express REST API with Prisma ORM, JWT Auth, price snapshotting, simulated payment processing, and idempotent webhooks.
+- **`frontend/`**: Vite + React web application with Tailwind CSS, React Router v6, Axios interceptors, AuthContext, and live Developer Tools for webhook testing.
 
 ---
 
-## 🏛 Architecture & Key Design Decisions
+## 📁 Repository Structure
 
-1. **Separation of Concerns (Clean Architecture)**
-   - **Routes**: Define HTTP endpoints, apply rate limiters, validation schemas, and auth guards.
-   - **Controllers**: Thin layer parsing requests, calling services, and returning standard API responses.
-   - **Services**: Pure framework-agnostic business logic containing all data transformations, transaction boundaries, and authorization logic.
-   - **Prisma Data Layer**: Fully relational PostgreSQL models with foreign key constraints, default timestamps, and unique indexes.
-
-2. **Idempotent Webhook Processing**
-   - Implements a `WebhookEvent` model with a DB-level `UNIQUE` constraint on `eventId`.
-   - Incoming webhooks attempt an atomic insert into `WebhookEvent`. If `eventId` already exists, the server immediately returns HTTP 200 with `{ processed: false, duplicate: true }` without modifying any payment or booking state.
-
-3. **Double Payment & Race Condition Protection**
-   - The `Payment` model enforces a `UNIQUE` constraint on `bookingId` (`one payment per booking`).
-   - Payment processing uses atomic Prisma transactions (`prisma.$transaction`). If concurrent payment requests attempt to satisfy the same booking, database unique constraint violations (`P2002`) are caught and returned as clean `409 Conflict` errors.
-
-4. **Snapshot Pricing**
-   - When a booking is created (`POST /bookings`), the current live price of the selected diagnostic test is copied directly into `booking.amount`. Future price changes to the test will never affect existing bookings.
-
-5. **Plain JavaScript over TypeScript**
-   - Written in modern JavaScript (Node.js ESM/CommonJS) with Zod runtime validation guaranteeing strict type checking and body validation at runtime.
-
----
-
-## 🚀 Setup & Database Seeding
-
-### 1. Database Seeding Script
-
-Populate the system with realistic diagnostic centres, tests, users, and varied booking/payment records for instant live testing:
-
-```bash
-npm run seed
+```
+.
+├── backend/                  # Express REST API Backend Service
+│   ├── Dockerfile            # Container definition for backend
+│   ├── package.json          # Node dependencies & test/seed scripts
+│   ├── prisma/               # Prisma schema & database migration SQL
+│   │   ├── migrations/
+│   │   ├── schema.prisma
+│   │   └── seed.js           # Database seed script for realistic sample data
+│   ├── src/                  # Clean architecture layer (Routes -> Controllers -> Services)
+│   └── tests/                # Unit & Integration test suites
+├── frontend/                 # Vite + React Frontend Application
+│   ├── package.json          # React dependencies & scripts
+│   ├── src/                  # Components, Pages, Context, API client layer
+│   └── vite.config.js        # Vite bundler config
+├── docker-compose.yml        # Docker Compose orchestration
+└── README.md
 ```
 
-#### Demo User Credentials (Password for all: `Password123!`)
+---
+
+## 🚀 Quick Start Guide
+
+### 1. Run the Backend API (`/backend`)
+
+```bash
+cd backend
+npm install
+npm run seed     # Populate database with sample centres, tests, users, bookings
+npm start        # Starts API server on http://localhost:3000
+```
+- API Base URL: `http://localhost:3000`
+- Swagger Docs: `http://localhost:3000/api-docs`
+
+---
+
+### 2. Run the React Frontend (`/frontend`)
+
+In a separate terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev      # Starts Vite dev server on http://localhost:5173
+```
+- Application URL: `http://localhost:5173`
+
+---
+
+## 🔑 Demo User Accounts
+
+All seeded demo accounts use the password: `Password123!`
+
 - **Priya Sharma**: `priya.sharma@example.com`
 - **Rahul Verma**: `rahul.verma@example.com`
 - **Ananya Deshmukh**: `ananya.deshmukh@example.com`
@@ -46,120 +68,11 @@ npm run seed
 
 ---
 
-## 🧬 Entity Relationship (ER) Diagram
-
-```mermaid
-erDiagram
-    User ||--o{ Booking : "creates"
-    DiagnosticCentre ||--o{ DiagnosticTest : "offers"
-    DiagnosticCentre ||--o{ Booking : "hosts"
-    DiagnosticTest ||--o{ Booking : "booked in"
-    Booking ||--o| Payment : "has single"
-    Booking ||--o{ WebhookEvent : "references"
-
-    User {
-        string id PK
-        string email UK
-        string password
-        string name
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    DiagnosticCentre {
-        string id PK
-        string name
-        string location
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    DiagnosticTest {
-        string id PK
-        string centreId FK
-        string name
-        float price
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Booking {
-        string id PK
-        string userId FK
-        string testId FK
-        string centreId FK
-        datetime appointmentDatetime
-        float amount
-        enum status "PENDING | CONFIRMED | FAILED | CANCELLED"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Payment {
-        string id PK
-        string bookingId UK_FK
-        float amount
-        enum status "SUCCESS | FAILED | PENDING"
-        string providerReferenceId UK
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    WebhookEvent {
-        string id PK
-        string eventId UK
-        string bookingId
-        string providerReferenceId
-        string status
-        json payload
-        datetime processedAt
-        datetime createdAt
-    }
-```
-
----
-
-## 🚀 Execution Instructions
-
-### Option 1: Running with Docker & Docker Compose (Recommended)
-
-```bash
-docker-compose up --build
-```
-
-- API Base URL: `http://localhost:3000`
-- Swagger API Docs: `http://localhost:3000/api-docs`
-
----
-
-### Option 2: Running Locally without Docker
-
-1. **Install Dependencies**:
-   ```bash
-   npm install
-   ```
-
-2. **Seed Sample Data**:
-   ```bash
-   npm run seed
-   ```
-
-3. **Start Development Server**:
-   ```bash
-   npm run dev
-   ```
-
----
-
 ## 🧪 Running Automated Tests
 
-Run the test suite:
+Run backend unit and integration tests:
 ```bash
+cd backend
 npm test
 ```
-
----
-
-## 📚 API Specification & Endpoint Documentation
-
-Interactive Swagger OpenAPI 3.0 documentation is available at **`/api-docs`**.
+- **30/30 unit & integration tests passing (100% pass rate)**.

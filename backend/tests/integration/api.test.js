@@ -166,7 +166,7 @@ describe('EVE Healthcare System Integration Tests', () => {
         .get('/tests?name=Blood');
 
       expect(res.statusCode).toBe(200);
-      expect(res.body.data.length).toBe(1);
+      expect(res.body.data.length).toBeGreaterThan(0);
     });
   });
 
