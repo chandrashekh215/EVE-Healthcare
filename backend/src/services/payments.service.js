@@ -38,8 +38,14 @@ class PaymentsService {
     }
 
     // 5. Determine payment outcome (Simulated gateway decision)
-    // Rule: Explicit simulateFailure flag triggers FAILED, otherwise SUCCESS
-    const isFailure = simulateFailure === true || simulateFailure === 'true';
+    // Rule: Explicit simulateFailure flag forces result (true -> FAILED, false -> SUCCESS).
+    // When omitted (undefined/null), determine via weighted random draw (85% SUCCESS / 15% FAILED).
+    let isFailure;
+    if (simulateFailure !== undefined && simulateFailure !== null) {
+      isFailure = simulateFailure === true || simulateFailure === 'true';
+    } else {
+      isFailure = Math.random() < 0.15;
+    }
     const paymentStatus = isFailure ? 'FAILED' : 'SUCCESS';
     const bookingNewStatus = isFailure ? 'FAILED' : 'CONFIRMED';
     const providerReferenceId = `PAY-${uuidv4().substring(0, 8).toUpperCase()}-${Date.now()}`;

@@ -1,6 +1,7 @@
 const express = require('express');
 const webhooksController = require('../controllers/webhooks.controller');
 const validate = require('../middleware/validate');
+const { webhookRateLimiter } = require('../middleware/rateLimiters');
 const { webhookSchema } = require('../schemas/payment.schema');
 
 const router = express.Router();
@@ -38,6 +39,6 @@ const router = express.Router();
  *       404:
  *         description: Referenced booking not found
  */
-router.post('/webhook', validate(webhookSchema), webhooksController.handlePaymentWebhook);
+router.post('/webhook', webhookRateLimiter, validate(webhookSchema), webhooksController.handlePaymentWebhook);
 
 module.exports = router;

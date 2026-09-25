@@ -36,6 +36,15 @@ A production-grade, full-stack monorepo application for **EVE Healthcare** divid
 ```bash
 cd backend
 npm install
+
+# Environment setup: Create a .env file in backend/
+# PORT=3000
+# NODE_ENV=development
+# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/eve_healthcare?schema=public"
+# JWT_SECRET="super-secret-eve-healthcare-jwt-key-2026"
+# JWT_EXPIRES_IN="1d"
+# LOG_LEVEL="info"
+
 npm run seed     # Populate database with sample centres, tests, users, bookings
 npm start        # Starts API server on http://localhost:3000
 ```
@@ -75,7 +84,83 @@ Run backend unit and integration tests:
 cd backend
 npm test
 ```
-- **30/30 unit & integration tests passing (100% pass rate)**.
+- **33/33 unit & integration tests passing (100% pass rate)**.
+
+---
+
+## 📝 Example Requests
+
+### 1. POST /auth/login (User Authentication)
+**Request Body:**
+```json
+{
+  "email": "priya.sharma@example.com",
+  "password": "Password123!"
+}
+```
+
+**Success Response (200 OK - Trimmed):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "usr_priya_101",
+      "name": "Priya Sharma",
+      "email": "priya.sharma@example.com"
+    }
+  }
+}
+```
+
+### 2. POST /bookings (Create Diagnostic Test Booking)
+**Request Body:**
+```json
+{
+  "testId": "test_cbc_apex",
+  "appointmentDatetime": "2026-10-15T10:00:00.000Z"
+}
+```
+
+**Success Response (201 Created - Trimmed):**
+```json
+{
+  "success": true,
+  "message": "Booking created successfully",
+  "data": {
+    "id": "bkg_1001",
+    "userId": "usr_priya_101",
+    "testId": "test_cbc_apex",
+    "amount": 350.00,
+    "status": "PENDING",
+    "appointmentDatetime": "2026-10-15T10:00:00.000Z"
+  }
+}
+```
+
+---
+
+## 💡 Important Assumptions
+
+- **Access Control & Auth Guard**: Write endpoints (`POST /centres`, `POST /centres/:id/tests`, `/bookings`, `/payments`) require JWT authentication (`Authorization: Bearer <token>`); catalog read endpoints stay public.
+- **Weighted Probabilistic Payments**: Default payment simulation evaluates via an 85% `SUCCESS` / 15% `FAILED` random draw when `simulateFailure` is omitted, while explicit `simulateFailure: true/false` overrides allow deterministic testing.
+- **Rate Limiting (Implemented)**: Enforces IP rate limits on `POST /auth/login` (10 req / 15 min) and `POST /payments/webhook` (60 req / min) returning HTTP 429.
+- **Price Snapshotting**: Bookings store a snapshot price (`amount`) upon creation to insulate historical records against catalog test price changes.
+
+> For complete details, see [**`backend/README.md` - Important Assumptions](./backend/README.md#-important-assumptions).
+
+---
+
+## 🔮 What I Would Improve With More Time
+
+- **BullMQ / Redis Asynchronous Webhook Queue**: Transition webhook processing from synchronous HTTP execution to a resilient Redis worker queue with retries and DLQ.
+- **Role-Based Access Control (RBAC)**: Expand JWT claims to distinguish `ROLE_ADMIN` (centre/test write access) from `ROLE_PATIENT` (booking access).
+- **Refresh Tokens & Revocation**: Implement short-lived access tokens with HTTP-only refresh tokens stored in Redis for token revocation on logout.
+- **End-to-End Automated Testing**: Expand the 33-test Jest suite with Playwright / Cypress browser testing.
+
+> For full architectural roadmap details, see [**`backend/README.md` - What I Would Improve](./backend/README.md#-what-i-would-improve-with-more-time).
 
 ---
 
@@ -93,4 +178,3 @@ For complete, detailed technical documentation, please refer to [**`backend/READ
    - Payment processing simulation rules, authentication & access control policy, booking cancellation rules, and security specifications.
 4. **[What I Would Improve With More Time](./backend/README.md#-what-i-would-improve-with-more-time)**
    - Asynchronous job queue processing (BullMQ + Redis), Role-Based Access Control (RBAC), JWT Refresh Token rotation, database indexing, and Playwright E2E testing.
-

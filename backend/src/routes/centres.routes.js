@@ -1,6 +1,7 @@
 const express = require('express');
 const centresController = require('../controllers/centres.controller');
 const validate = require('../middleware/validate');
+const { authenticateJWT } = require('../middleware/auth');
 const {
   createCentreSchema,
   getCentresSchema,
@@ -8,6 +9,7 @@ const {
 } = require('../schemas/centre.schema');
 
 const router = express.Router();
+
 
 /**
  * @swagger
@@ -50,7 +52,7 @@ const router = express.Router();
  *       200:
  *         description: List of diagnostic centres
  */
-router.post('/', validate(createCentreSchema), centresController.createCentre);
+router.post('/', authenticateJWT, validate(createCentreSchema), centresController.createCentre);
 router.get('/', validate(getCentresSchema, 'query'), centresController.getCentres);
 
 /**
@@ -105,6 +107,6 @@ router.get('/:id', centresController.getCentreById);
  *       404:
  *         description: Centre not found
  */
-router.post('/:id/tests', validate(addTestSchema), centresController.addTestToCentre);
+router.post('/:id/tests', authenticateJWT, validate(addTestSchema), centresController.addTestToCentre);
 
 module.exports = router;

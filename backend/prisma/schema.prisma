@@ -74,6 +74,7 @@ model Booking {
   updatedAt           DateTime         @updatedAt
   payment             Payment?
 
+  @@index([userId, status])
   @@map("bookings")
 }
 
@@ -87,6 +88,7 @@ model Payment {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
+  @@index([providerReferenceId])
   @@map("payments")
 }
 

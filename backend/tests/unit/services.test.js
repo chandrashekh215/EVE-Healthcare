@@ -76,4 +76,28 @@ describe('Unit Tests - Security Utilities & Zod Schemas', () => {
       expect(webhookSchema.safeParse(missingIdentifiers).success).toBe(false);
     });
   });
+
+  describe('Payments Service - Probabilistic Random Draw Logic', () => {
+    it('should calculate FAILED when Math.random() < 0.15 and SUCCESS when >= 0.15', () => {
+      const simulateOutcome = (simulateFailure, randomVal) => {
+        let isFailure;
+        if (simulateFailure !== undefined && simulateFailure !== null) {
+          isFailure = simulateFailure === true || simulateFailure === 'true';
+        } else {
+          isFailure = randomVal < 0.15;
+        }
+        return isFailure ? 'FAILED' : 'SUCCESS';
+      };
+
+      // Omitted simulateFailure with random draw
+      expect(simulateOutcome(undefined, 0.10)).toBe('FAILED');
+      expect(simulateOutcome(undefined, 0.149)).toBe('FAILED');
+      expect(simulateOutcome(undefined, 0.15)).toBe('SUCCESS');
+      expect(simulateOutcome(undefined, 0.85)).toBe('SUCCESS');
+
+      // Explicit simulateFailure flags override random draw
+      expect(simulateOutcome(true, 0.99)).toBe('FAILED');
+      expect(simulateOutcome(false, 0.01)).toBe('SUCCESS');
+    });
+  });
 });

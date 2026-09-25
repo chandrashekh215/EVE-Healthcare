@@ -115,9 +115,22 @@ describe('EVE Healthcare System Integration Tests', () => {
   });
 
   describe('2. Diagnostic Centres & Tests Endpoints', () => {
-    it('POST /centres - should create a diagnostic centre', async () => {
+    it('POST /centres - should reject unauthenticated request with 401', async () => {
       const res = await request(app)
         .post('/centres')
+        .send({
+          name: 'Unauth Centre',
+          location: 'Unauthorized Loc',
+        });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('POST /centres - should create a diagnostic centre when authenticated', async () => {
+      const res = await request(app)
+        .post('/centres')
+        .set('Authorization', `Bearer ${user1Token}`)
         .send({
           name: 'Metro Diagnostics',
           location: '123 Health Ave, New York',
@@ -138,9 +151,22 @@ describe('EVE Healthcare System Integration Tests', () => {
       expect(res.body).toHaveProperty('pagination');
     });
 
-    it('POST /centres/:id/tests - should add a diagnostic test to centre', async () => {
+    it('POST /centres/:id/tests - should reject unauthenticated request with 401', async () => {
       const res = await request(app)
         .post(`/centres/${centreId}/tests`)
+        .send({
+          name: 'Comprehensive Blood Panel',
+          price: 150.00,
+        });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('POST /centres/:id/tests - should add a diagnostic test to centre when authenticated', async () => {
+      const res = await request(app)
+        .post(`/centres/${centreId}/tests`)
+        .set('Authorization', `Bearer ${user1Token}`)
         .send({
           name: 'Comprehensive Blood Panel',
           price: 150.00,

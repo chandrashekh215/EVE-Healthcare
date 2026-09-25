@@ -272,10 +272,10 @@ erDiagram
 | :--- | :--- | :--- | :--- |
 | `POST` | `/auth/signup` | Register a new user account | ❌ No |
 | `POST` | `/auth/login` | Authenticate credentials & return JWT | ❌ No |
-| `POST` | `/centres` | Create a diagnostic centre | ❌ No |
+| `POST` | `/centres` | Create a diagnostic centre | 🔒 Yes (JWT) |
 | `GET` | `/centres` | List diagnostic centres (paginated) | ❌ No |
 | `GET` | `/centres/:id` | Get centre detail with tests catalog | ❌ No |
-| `POST` | `/centres/:id/tests` | Add a diagnostic test to a centre | ❌ No |
+| `POST` | `/centres/:id/tests` | Add a diagnostic test to a centre | 🔒 Yes (JWT) |
 | `GET` | `/tests` | Search/filter diagnostic tests catalog | ❌ No |
 | `POST` | `/bookings` | Create a booking with price snapshot | 🔒 Yes (JWT) |
 | `GET` | `/bookings` | List authenticated user's bookings | 🔒 Yes (JWT) |
@@ -381,7 +381,7 @@ Authenticates credentials and returns a signed JWT access token.
 ### 3. POST /centres
 Creates a diagnostic centre.
 
-- **Auth Required**: No
+- **Auth Required**: Yes (`Authorization: Bearer <token>`)
 - **Request Body**:
   ```json
   {
@@ -479,7 +479,7 @@ Retrieves detailed information for a diagnostic centre including its test catalo
 ### 6. POST /centres/:id/tests
 Adds a new diagnostic test procedure to a specific centre.
 
-- **Auth Required**: No
+- **Auth Required**: Yes (`Authorization: Bearer <token>`)
 - **Path Parameter**: `id` = `centre_apex`
 - **Request Body**:
   ```json
@@ -781,15 +781,20 @@ Idempotent payment webhook receiver. Checks/inserts `WebhookEvent` by unique `ev
 ## 💡 Important Assumptions
 
 1. **Simulated Payment Decision Rule**:
-   - In `PaymentsService`, payment outcome is strictly deterministic: if `simulateFailure: true` (or string `'true'`) is passed in the request body, outcome is set to `FAILED` and booking status becomes `FAILED`. Otherwise, outcome is `SUCCESS` and booking status becomes `CONFIRMED`.
+   - In `PaymentsService`, when `simulateFailure` is omitted (`undefined`/`null`), the gateway decision is determined via a weighted random draw (85% `SUCCESS` / 15% `FAILED`).
+   - If `simulateFailure: true` is explicitly passed, the outcome is deterministically set to `FAILED`. If `simulateFailure: false` is explicitly passed, the outcome is forced to `SUCCESS`.
 2. **Access Control Model**:
-   - Diagnostic Centre and Diagnostic Test management routes (`POST /centres`, `POST /centres/:id/tests`) are publicly accessible to simplify demo evaluations without requiring admin role setups.
-   - All Booking routes (`POST /bookings`, `GET /bookings`, `GET /bookings/:id`, `POST /bookings/:id/cancel`) strictly require JWT authentication and enforce ownership guards (`booking.userId === req.user.id`).
-3. **Booking Cancellation Rules**:
+   - Diagnostic Centre and Test write management routes (`POST /centres`, `POST /centres/:id/tests`) and all Booking/Payment routes require valid JWT authentication (`authenticateJWT`).
+   - Read routes (`GET /centres`, `GET /centres/:id`, `GET /tests`) remain public.
+3. **Rate Limiting Enforcement (Bonus Implemented)**:
+   - Configured `express-rate-limit` on sensitive write endpoints: `POST /auth/login` (10 requests per 15 minutes per IP) and `POST /payments/webhook` (60 requests per minute per IP). Returns standardized HTTP 429 error shape when exceeded.
+4. **Database Indexes Implemented**:
+   - Added composite index `Booking(userId, status)` for fast booking queries and single index `Payment(providerReferenceId)` in Prisma schema.
+5. **Booking Cancellation Rules**:
    - Cancellation is permitted if status is `PENDING` or `CONFIRMED`.
    - Calling cancel on an already `CANCELLED` booking returns a clean HTTP 200 response rather than throwing an unhandled error.
    - Calling cancel on a `FAILED` booking returns an HTTP 409 Conflict error.
-4. **Security & Password Specifications**:
+6. **Security & Password Specifications**:
    - User passwords are required to be at least 6 characters long and are hashed using Bcrypt with 10 salt rounds.
    - JWT tokens are signed using HMAC SHA-256 with a 1-day (`1d`) expiration.
 
@@ -800,19 +805,17 @@ Idempotent payment webhook receiver. Checks/inserts `WebhookEvent` by unique `ev
 1. **BullMQ / Redis Asynchronous Webhook Queue**:
    - Transition webhook processing from synchronous HTTP execution to an asynchronous worker queue (BullMQ + Redis) with exponential backoff retries and dead-letter queues (DLQ).
 2. **Role-Based Access Control (RBAC)**:
-   - Introduce `ROLE_ADMIN` and `ROLE_PATIENT` user roles to restrict centre and test creation routes to verified administrative staff.
+   - Expand JWT claims to include `ROLE_ADMIN` and `ROLE_PATIENT` user roles for fine-grained permissions beyond basic JWT token verification.
 3. **Refresh Tokens & JWT Blacklisting**:
    - Implement short-lived access tokens (15 mins) paired with HTTP-only refresh tokens stored in Redis for token revocation on logout.
-4. **PostgreSQL Database Indexing Optimizations**:
-   - Add composite database indexes (e.g., `CREATE INDEX idx_bookings_user_status ON bookings(userId, status)`) to optimize multi-column filtering queries as database size grows.
-5. **End-to-End Automated Testing**:
-   - Expand the current 30-test Jest suite with Playwright / Cypress end-to-end browser integration tests.
+4. **End-to-End Automated Testing**:
+   - Expand the Jest/Supertest suite with Playwright / Cypress end-to-end browser integration tests.
 
 ---
 
 ## 🧪 Running Automated Tests
 
-The repository contains a full test suite powered by **Jest** and **Supertest** (30 unit & integration tests, 100% pass rate).
+The repository contains a full test suite powered by **Jest** and **Supertest** (33 unit & integration tests, 100% pass rate).
 
 ```bash
 npm test

@@ -1,6 +1,7 @@
 const express = require('express');
 const authController = require('../controllers/auth.controller');
 const validate = require('../middleware/validate');
+const { loginRateLimiter } = require('../middleware/rateLimiters');
 const { signupSchema, loginSchema } = require('../schemas/auth.schema');
 
 const router = express.Router();
@@ -64,6 +65,6 @@ router.post('/signup', validate(signupSchema), authController.signup);
  *       401:
  *         description: Invalid credentials
  */
-router.post('/login', validate(loginSchema), authController.login);
+router.post('/login', loginRateLimiter, validate(loginSchema), authController.login);
 
 module.exports = router;
