@@ -353,6 +353,63 @@ describe('EVE Healthcare System Integration Tests', () => {
       expect(count2).toBe(1);
     });
 
+    it('POST /payments/webhook - should retry on transient DB failure and succeed when retried', async () => {
+      const retryEventId = `evt_transient_retry_${Date.now()}`;
+      let attempts = 0;
+      const originalTx = prisma.$transaction.bind(prisma);
+
+      const spyTx = jest.spyOn(prisma, '$transaction').mockImplementation(async (cb) => {
+        attempts++;
+        if (attempts <= 2) {
+          const err = new Error('Database connection deadlock simulated');
+          err.code = 'P2034';
+          throw err;
+        }
+        return await originalTx(cb);
+      });
+
+      const res = await request(app)
+        .post('/payments/webhook')
+        .send({
+          eventId: retryEventId,
+          bookingId: webhookBookingId,
+          status: 'SUCCESS',
+        });
+
+      spyTx.mockRestore();
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.data.processed).toBe(true);
+      expect(attempts).toBe(3);
+    });
+
+    it('POST /payments/webhook - should return 503 Service Unavailable when all retries are exhausted on transient errors', async () => {
+      const exhaustedEventId = `evt_transient_exhausted_${Date.now()}`;
+      const spyTx = jest.spyOn(prisma, '$transaction').mockImplementation(async () => {
+        const err = new Error('Database connection refused');
+        err.code = 'P1001';
+        throw err;
+      });
+
+      const res = await request(app)
+        .post('/payments/webhook')
+        .send({
+          eventId: exhaustedEventId,
+          bookingId: webhookBookingId,
+          status: 'SUCCESS',
+        });
+
+      spyTx.mockRestore();
+
+      expect(res.statusCode).toBe(503);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.message).toContain('failed after 3 attempts');
+
+      // Verify event was NOT recorded in DB
+      const eventInDb = await prisma.webhookEvent.findUnique({ where: { eventId: exhaustedEventId } });
+      expect(eventInDb).toBeNull();
+    });
+
     it('POST /bookings/:id/cancel - calling cancel on already confirmed booking updates status to CANCELLED', async () => {
       const res = await request(app)
         .post(`/bookings/${webhookBookingId}/cancel`)

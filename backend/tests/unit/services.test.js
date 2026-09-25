@@ -100,4 +100,53 @@ describe('Unit Tests - Security Utilities & Zod Schemas', () => {
       expect(simulateOutcome(false, 0.01)).toBe('SUCCESS');
     });
   });
+
+  describe('Webhook Retry Helper & Transient Error Classification', () => {
+    const { isTransientError, executeWebhookWithRetry } = require('../../src/utils/retry');
+    const { ServiceUnavailableError } = require('../../src/utils/errors');
+
+    it('should correctly identify transient errors vs business logic errors', () => {
+      expect(isTransientError({ code: 'P2034', message: 'Transaction deadlock' })).toBe(true);
+      expect(isTransientError({ code: 'P1001', message: 'Can not connect to database' })).toBe(true);
+      expect(isTransientError({ message: 'Connection timeout' })).toBe(true);
+      expect(isTransientError({ isTransient: true })).toBe(true);
+
+      // Business errors must NOT be transient
+      expect(isTransientError({ statusCode: 400, message: 'Validation Error' })).toBe(false);
+      expect(isTransientError({ statusCode: 404, message: 'Not Found' })).toBe(false);
+      expect(isTransientError({ code: 'P2002', message: 'Unique constraint' })).toBe(false);
+    });
+
+    it('should retry transient errors and succeed when an attempt passes', async () => {
+      let attempts = 0;
+      const fn = jest.fn(async () => {
+        attempts++;
+        if (attempts < 3) {
+          const err = new Error('Transient DB timeout');
+          err.code = 'P2034';
+          throw err;
+        }
+        return { success: true };
+      });
+
+      const res = await executeWebhookWithRetry('evt_retry_test_1', fn, 3, 10);
+      expect(res).toEqual({ success: true });
+      expect(attempts).toBe(3);
+    });
+
+    it('should exhaust retries and throw ServiceUnavailableError (503) when transient errors persist', async () => {
+      let attempts = 0;
+      const fn = jest.fn(async () => {
+        attempts++;
+        const err = new Error('Connection refused');
+        err.code = 'P1001';
+        throw err;
+      });
+
+      await expect(executeWebhookWithRetry('evt_retry_fail_1', fn, 3, 10)).rejects.toThrow(
+        ServiceUnavailableError
+      );
+      expect(attempts).toBe(3);
+    });
+  });
 });

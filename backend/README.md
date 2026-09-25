@@ -775,6 +775,23 @@ Idempotent payment webhook receiver. Checks/inserts `WebhookEvent` by unique `ev
     }
   }
   ```
+- **Error Response (503 Service Unavailable - Exhausted Transient Retries)**:
+  ```json
+  {
+    "success": false,
+    "error": {
+      "message": "Webhook processing failed after 3 attempts due to transient database error: Database connection deadlock simulated"
+    }
+  }
+  ```
+
+#### Webhook Retry & Exponential Backoff Strategy
+- **In-Process Retry Execution**: After the initial idempotency check passes, the atomic Prisma transaction updating Payment & Booking states is executed via an in-process retry helper (`executeWebhookWithRetry`).
+- **Backoff Schedule**: Up to 3 attempts with exponential backoff delays (100ms, 300ms, 900ms).
+- **Transient Failures (Retried)**: Retries trigger strictly on transient DB failures (Prisma `P1xxx` connection errors, `P2034` transaction deadlocks/write conflicts, `P2024` connection pool timeouts, socket/network timeouts).
+- **Business Logic Outcomes (Instant Failure)**: Operational errors (`NotFoundError` 404, `BadRequestError` 400, `ConflictError` 409, `P2002` unique constraint) fail immediately without retrying.
+- **Exhaustion Behavior**: If all 3 attempts fail on transient errors, an HTTP 503 `ServiceUnavailableError` is returned and the `WebhookEvent` is **not** recorded as processed in the database.
+- **Structured Pino Logging**: Every attempt logs a structured JSON entry containing `eventId`, `attempt`, `outcome` (`SUCCESS`, `RETRY`, `FAILED`), and `durationMs`.
 
 ---
 
@@ -815,7 +832,7 @@ Idempotent payment webhook receiver. Checks/inserts `WebhookEvent` by unique `ev
 
 ## 🧪 Running Automated Tests
 
-The repository contains a full test suite powered by **Jest** and **Supertest** (33 unit & integration tests, 100% pass rate).
+The repository contains a full test suite powered by **Jest** and **Supertest** (38 unit & integration tests, 100% pass rate).
 
 ```bash
 npm test

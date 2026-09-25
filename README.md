@@ -84,7 +84,7 @@ Run backend unit and integration tests:
 cd backend
 npm test
 ```
-- **33/33 unit & integration tests passing (100% pass rate)**.
+- **38/38 unit & integration tests passing (100% pass rate)**.
 
 ---
 
@@ -146,6 +146,7 @@ npm test
 
 - **Access Control & Auth Guard**: Write endpoints (`POST /centres`, `POST /centres/:id/tests`, `/bookings`, `/payments`) require JWT authentication (`Authorization: Bearer <token>`); catalog read endpoints stay public.
 - **Weighted Probabilistic Payments**: Default payment simulation evaluates via an 85% `SUCCESS` / 15% `FAILED` random draw when `simulateFailure` is omitted, while explicit `simulateFailure: true/false` overrides allow deterministic testing.
+- **Webhook Retry & Exponential Backoff (Implemented)**: In-process 3-attempt exponential backoff (100ms, 300ms, 900ms) with structured Pino JSON logging for transient DB errors (`P1xxx`, `P2034`), returning HTTP 503 if exhausted without marking event processed.
 - **Rate Limiting (Implemented)**: Enforces IP rate limits on `POST /auth/login` (10 req / 15 min) and `POST /payments/webhook` (60 req / min) returning HTTP 429.
 - **Price Snapshotting**: Bookings store a snapshot price (`amount`) upon creation to insulate historical records against catalog test price changes.
 
