@@ -29,6 +29,26 @@ class CentresController {
     }
   }
 
+  async getCentreTests(req, res, next) {
+    try {
+      const { items, totalItems, page, pageSize } = await centresService.getCentreTests(
+        req.params.id,
+        req.query
+      );
+      return paginatedResponse(
+        res,
+        200,
+        'Diagnostic centre tests retrieved successfully',
+        items,
+        page,
+        pageSize,
+        totalItems
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async addTestToCentre(req, res, next) {
     try {
       const test = await centresService.addTestToCentre(req.params.id, req.body);

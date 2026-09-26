@@ -89,11 +89,62 @@ class CentresService {
   }
 
   /**
+   * List tests belonging to a specific centre with pagination
+   */
+  async getCentreTests(centreId, queryParams = {}) {
+    const centre = await prisma.diagnosticCentre.findUnique({
+      where: { id: centreId },
+    });
+
+    if (!centre) {
+      throw new NotFoundError(`Diagnostic centre with ID '${centreId}' not found`);
+    }
+
+    let page = Number(queryParams.page) || 1;
+    let pageSize = Number(queryParams.pageSize) || 10;
+
+    if (queryParams.limit) {
+      pageSize = Number(queryParams.limit);
+    }
+    if (queryParams.offset !== undefined) {
+      page = Math.floor(Number(queryParams.offset) / pageSize) + 1;
+    }
+
+    const skip = (page - 1) * pageSize;
+    const where = { centreId };
+
+    const [items, totalItems] = await Promise.all([
+      prisma.diagnosticTest.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.diagnosticTest.count({ where }),
+    ]);
+
+    return {
+      items,
+      totalItems,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
    * Search / list all diagnostic tests with filters
    */
-  async getTests(queryParams) {
-    const page = Number(queryParams.page) || 1;
-    const pageSize = Number(queryParams.pageSize) || 10;
+  async getTests(queryParams = {}) {
+    let page = Number(queryParams.page) || 1;
+    let pageSize = Number(queryParams.pageSize) || 10;
+
+    if (queryParams.limit) {
+      pageSize = Number(queryParams.limit);
+    }
+    if (queryParams.offset !== undefined) {
+      page = Math.floor(Number(queryParams.offset) / pageSize) + 1;
+    }
+
     const skip = (page - 1) * pageSize;
 
     const where = {};

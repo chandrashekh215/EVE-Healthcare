@@ -40,6 +40,7 @@ const paginatedResponse = (res, statusCode, message, items, page, pageSize, tota
     pagination: {
       page: Number(page),
       pageSize: Number(pageSize),
+      total: Number(totalItems),
       totalItems: Number(totalItems),
       totalPages,
     },

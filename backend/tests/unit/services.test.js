@@ -75,6 +75,29 @@ describe('Unit Tests - Security Utilities & Zod Schemas', () => {
       const missingIdentifiers = { eventId: 'evt_002', status: 'SUCCESS' };
       expect(webhookSchema.safeParse(missingIdentifiers).success).toBe(false);
     });
+
+    it('should validate pagination schemas with defaults and constraints', () => {
+      const { getCentresSchema, getCentreTestsSchema } = require('../../src/schemas/centre.schema');
+      const { getBookingsSchema } = require('../../src/schemas/booking.schema');
+
+      const defaultParsed = getCentresSchema.parse({});
+      expect(defaultParsed.page).toBe(1);
+      expect(defaultParsed.pageSize).toBe(10);
+
+      const customParsed = getCentreTestsSchema.parse({ page: '2', pageSize: '25', limit: '25', offset: '25' });
+      expect(customParsed.page).toBe(2);
+      expect(customParsed.pageSize).toBe(25);
+      expect(customParsed.limit).toBe(25);
+      expect(customParsed.offset).toBe(25);
+
+      const bookingParsed = getBookingsSchema.parse({ page: '3', pageSize: '5' });
+      expect(bookingParsed.page).toBe(3);
+      expect(bookingParsed.pageSize).toBe(5);
+
+      // Rejects invalid max pageSize (> 100) or negative page (< 1)
+      expect(getCentresSchema.safeParse({ pageSize: 500 }).success).toBe(false);
+      expect(getBookingsSchema.safeParse({ page: 0 }).success).toBe(false);
+    });
   });
 
   describe('Payments Service - Probabilistic Random Draw Logic', () => {

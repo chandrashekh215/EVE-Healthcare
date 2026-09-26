@@ -151,6 +151,36 @@ describe('EVE Healthcare System Integration Tests', () => {
       expect(res.body).toHaveProperty('pagination');
     });
 
+    it('GET /centres - should support custom page and pageSize query parameters', async () => {
+      const res = await request(app)
+        .get('/centres?page=1&pageSize=1');
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.pagination.page).toBe(1);
+      expect(res.body.pagination.pageSize).toBe(1);
+      expect(res.body.pagination).toHaveProperty('total');
+      expect(res.body.pagination).toHaveProperty('totalPages');
+    });
+
+    it('GET /centres - should support limit and offset query parameters', async () => {
+      const res = await request(app)
+        .get('/centres?limit=1&offset=0');
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.pagination.pageSize).toBe(1);
+    });
+
+    it('GET /centres - should return empty data array for out-of-range page', async () => {
+      const res = await request(app)
+        .get('/centres?page=999&pageSize=10');
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.data).toEqual([]);
+      expect(res.body.pagination.page).toBe(999);
+    });
+
     it('POST /centres/:id/tests - should reject unauthenticated request with 401', async () => {
       const res = await request(app)
         .post(`/centres/${centreId}/tests`)
@@ -178,6 +208,33 @@ describe('EVE Healthcare System Integration Tests', () => {
       testId = res.body.data.id;
     });
 
+    it('GET /centres/:id/tests - should retrieve paginated tests for a centre', async () => {
+      const res = await request(app)
+        .get(`/centres/${centreId}/tests?page=1&pageSize=10`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.data[0].name).toBe('Comprehensive Blood Panel');
+      expect(res.body.pagination.page).toBe(1);
+      expect(res.body.pagination.totalItems).toBe(1);
+    });
+
+    it('GET /centres/:id/tests - should return empty array for out-of-range page', async () => {
+      const res = await request(app)
+        .get(`/centres/${centreId}/tests?page=999&pageSize=10`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.data).toEqual([]);
+      expect(res.body.pagination.page).toBe(999);
+    });
+
+    it('GET /centres/:id/tests - should return 404 for non-existent centre', async () => {
+      const res = await request(app)
+        .get('/centres/non-existent-centre-id/tests');
+
+      expect(res.statusCode).toBe(404);
+    });
+
     it('GET /centres/:id - should get centre detail with tests', async () => {
       const res = await request(app)
         .get(`/centres/${centreId}`);
@@ -196,7 +253,7 @@ describe('EVE Healthcare System Integration Tests', () => {
     });
   });
 
-  describe('3. Booking System Endpoints', () => {
+  describe('3. Booking System Endpoints & Status Lifecycle', () => {
     it('POST /bookings - should reject booking with appointment in the past', async () => {
       const pastDate = new Date(Date.now() - 3600000).toISOString();
       const res = await request(app)
@@ -210,7 +267,7 @@ describe('EVE Healthcare System Integration Tests', () => {
       expect(res.statusCode).toBe(400);
     });
 
-    it('POST /bookings - should create a booking with snapshot price', async () => {
+    it('POST /bookings - should create a booking with snapshot price (PENDING status)', async () => {
       const futureDate = new Date(Date.now() + 86400000).toISOString();
       const res = await request(app)
         .post('/bookings')
@@ -226,14 +283,25 @@ describe('EVE Healthcare System Integration Tests', () => {
       bookingId = res.body.data.id;
     });
 
-    it('GET /bookings - should list authenticated user\'s bookings', async () => {
+    it('GET /bookings - should list authenticated user\'s bookings with pagination', async () => {
       const res = await request(app)
-        .get('/bookings')
+        .get('/bookings?page=1&pageSize=10')
         .set('Authorization', `Bearer ${user1Token}`);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.data.length).toBe(1);
       expect(res.body.data[0].id).toBe(bookingId);
+      expect(res.body).toHaveProperty('pagination');
+    });
+
+    it('GET /bookings - should return empty data for out-of-range page', async () => {
+      const res = await request(app)
+        .get('/bookings?page=999&pageSize=10')
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.data).toEqual([]);
+      expect(res.body.pagination.page).toBe(999);
     });
 
     it('GET /bookings/:id - should reject access when non-owner user requests booking', async () => {
@@ -252,10 +320,59 @@ describe('EVE Healthcare System Integration Tests', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body.data.id).toBe(bookingId);
     });
+
+    it('POST /bookings/:id/cancel - should allow owner to cancel a PENDING booking (PENDING -> CANCELLED)', async () => {
+      // Create a dedicated PENDING booking to cancel
+      const futureDate = new Date(Date.now() + 86400000).toISOString();
+      const createRes = await request(app)
+        .post('/bookings')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ testId, appointmentDatetime: futureDate });
+
+      const tempBookingId = createRes.body.data.id;
+
+      const cancelRes = await request(app)
+        .post(`/bookings/${tempBookingId}/cancel`)
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      expect(cancelRes.statusCode).toBe(200);
+      expect(cancelRes.body.data.status).toBe('CANCELLED');
+    });
+
+    it('POST /payments - should reject payment for a CANCELLED booking with 409 Conflict', async () => {
+      // Create and cancel a booking
+      const futureDate = new Date(Date.now() + 86400000).toISOString();
+      const createRes = await request(app)
+        .post('/bookings')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ testId, appointmentDatetime: futureDate });
+
+      const tempId = createRes.body.data.id;
+      await request(app)
+        .post(`/bookings/${tempId}/cancel`)
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      const payRes = await request(app)
+        .post('/payments')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ bookingId: tempId, simulateFailure: false });
+
+      expect(payRes.statusCode).toBe(409);
+    });
+
+    it('POST /bookings/:id/cancel - non-owner cancellation attempt should return 403 Forbidden', async () => {
+      const res = await request(app)
+        .post(`/bookings/${bookingId}/cancel`)
+        .set('Authorization', `Bearer ${user2Token}`);
+
+      expect(res.statusCode).toBe(403);
+    });
   });
 
-  describe('4. Simulated Payments Endpoints', () => {
-    it('POST /payments - should simulate successful payment and confirm booking', async () => {
+  describe('4. Simulated Payments Endpoints & Status Transitions (CONFIRMED & FAILED)', () => {
+    let failedBookingId;
+
+    it('POST /payments - should simulate successful payment and confirm booking (PENDING -> CONFIRMED)', async () => {
       const res = await request(app)
         .post('/payments')
         .set('Authorization', `Bearer ${user1Token}`)
@@ -269,7 +386,7 @@ describe('EVE Healthcare System Integration Tests', () => {
       expect(res.body.data.booking.status).toBe('CONFIRMED');
     });
 
-    it('POST /payments - double payment attempt should return 409 Conflict', async () => {
+    it('POST /payments - double payment attempt on CONFIRMED booking should return 409 Conflict', async () => {
       const res = await request(app)
         .post('/payments')
         .set('Authorization', `Bearer ${user1Token}`)
@@ -279,9 +396,48 @@ describe('EVE Healthcare System Integration Tests', () => {
 
       expect(res.statusCode).toBe(409); // Already CONFIRMED
     });
+
+    it('POST /payments - should simulate failed payment (PENDING -> FAILED)', async () => {
+      const futureDate = new Date(Date.now() + 86400000).toISOString();
+      const createRes = await request(app)
+        .post('/bookings')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ testId, appointmentDatetime: futureDate });
+
+      failedBookingId = createRes.body.data.id;
+
+      const payRes = await request(app)
+        .post('/payments')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({
+          bookingId: failedBookingId,
+          simulateFailure: true,
+        });
+
+      expect(payRes.statusCode).toBe(200);
+      expect(payRes.body.data.payment.status).toBe('FAILED');
+      expect(payRes.body.data.booking.status).toBe('FAILED');
+    });
+
+    it('POST /bookings/:id/cancel - cancelling a FAILED booking should return 409 Conflict', async () => {
+      const res = await request(app)
+        .post(`/bookings/${failedBookingId}/cancel`)
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      expect(res.statusCode).toBe(409);
+    });
+
+    it('POST /payments - attempting payment on a FAILED booking should return 409 Conflict', async () => {
+      const res = await request(app)
+        .post('/payments')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ bookingId: failedBookingId });
+
+      expect(res.statusCode).toBe(409);
+    });
   });
 
-  describe('5. Payment Webhook Idempotency', () => {
+  describe('5. Payment Webhook Idempotency & Lifecycle Transitions', () => {
     let webhookBookingId;
 
     beforeAll(async () => {
@@ -410,7 +566,7 @@ describe('EVE Healthcare System Integration Tests', () => {
       expect(eventInDb).toBeNull();
     });
 
-    it('POST /bookings/:id/cancel - calling cancel on already confirmed booking updates status to CANCELLED', async () => {
+    it('POST /bookings/:id/cancel - calling cancel on already confirmed booking updates status to CANCELLED (CONFIRMED -> CANCELLED)', async () => {
       const res = await request(app)
         .post(`/bookings/${webhookBookingId}/cancel`)
         .set('Authorization', `Bearer ${user1Token}`);

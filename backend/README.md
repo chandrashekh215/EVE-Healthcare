@@ -275,10 +275,11 @@ erDiagram
 | `POST` | `/centres` | Create a diagnostic centre | 🔒 Yes (JWT) |
 | `GET` | `/centres` | List diagnostic centres (paginated) | ❌ No |
 | `GET` | `/centres/:id` | Get centre detail with tests catalog | ❌ No |
+| `GET` | `/centres/:id/tests` | List tests for a centre (paginated) | ❌ No |
 | `POST` | `/centres/:id/tests` | Add a diagnostic test to a centre | 🔒 Yes (JWT) |
-| `GET` | `/tests` | Search/filter diagnostic tests catalog | ❌ No |
+| `GET` | `/tests` | Search/filter diagnostic tests catalog (paginated) | ❌ No |
 | `POST` | `/bookings` | Create a booking with price snapshot | 🔒 Yes (JWT) |
-| `GET` | `/bookings` | List authenticated user's bookings | 🔒 Yes (JWT) |
+| `GET` | `/bookings` | List authenticated user's bookings (paginated) | 🔒 Yes (JWT) |
 | `GET` | `/bookings/:id` | Get booking detail (enforces owner) | 🔒 Yes (JWT) |
 | `POST` | `/bookings/:id/cancel` | Cancel a booking (PENDING/CONFIRMED) | 🔒 Yes (JWT) |
 | `POST` | `/payments` | Simulate payment for PENDING booking | 🔒 Yes (JWT) |
@@ -476,7 +477,49 @@ Retrieves detailed information for a diagnostic centre including its test catalo
 
 ---
 
-### 6. POST /centres/:id/tests
+### 6. GET /centres/:id/tests
+Retrieves paginated diagnostic tests offered by a specific centre (supports `page`, `pageSize`, `limit`, `offset`).
+
+- **Auth Required**: No
+- **Path Parameter**: `id` = `centre_apex`
+- **Query Parameters**: `?page=1&pageSize=10` or `?limit=10&offset=0`
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "Diagnostic centre tests retrieved successfully",
+    "data": [
+      {
+        "id": "t1",
+        "centreId": "centre_apex",
+        "name": "Complete Blood Count (CBC)",
+        "price": 350.00,
+        "createdAt": "2026-09-25T20:05:00.000Z",
+        "updatedAt": "2026-09-25T20:05:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "pageSize": 10,
+      "total": 1,
+      "totalItems": 1,
+      "totalPages": 1
+    }
+  }
+  ```
+- **Error Response (404 Not Found)**:
+  ```json
+  {
+    "success": false,
+    "error": {
+      "message": "Diagnostic centre with ID 'invalid_id' not found"
+    }
+  }
+  ```
+
+---
+
+### 7. POST /centres/:id/tests
 Adds a new diagnostic test procedure to a specific centre.
 
 - **Auth Required**: Yes (`Authorization: Bearer <token>`)
@@ -506,7 +549,7 @@ Adds a new diagnostic test procedure to a specific centre.
 
 ---
 
-### 7. GET /tests
+### 8. GET /tests
 Searches and lists diagnostic tests across all centres with pagination and filters (`name`, `centreId`).
 
 - **Auth Required**: No
@@ -541,7 +584,7 @@ Searches and lists diagnostic tests across all centres with pagination and filte
 
 ---
 
-### 8. POST /bookings
+### 9. POST /bookings
 Creates a new appointment booking for the authenticated user, copying the current test price as a snapshot into `amount`.
 
 - **Auth Required**: Yes (`Authorization: Bearer <token>`)
@@ -588,7 +631,7 @@ Creates a new appointment booking for the authenticated user, copying the curren
 
 ---
 
-### 9. GET /bookings
+### 10. GET /bookings
 Lists all bookings belonging to the current authenticated user.
 
 - **Auth Required**: Yes (`Authorization: Bearer <token>`)
@@ -613,6 +656,7 @@ Lists all bookings belonging to the current authenticated user.
     "pagination": {
       "page": 1,
       "pageSize": 10,
+      "total": 1,
       "totalItems": 1,
       "totalPages": 1
     }
@@ -621,7 +665,7 @@ Lists all bookings belonging to the current authenticated user.
 
 ---
 
-### 10. GET /bookings/:id
+### 11. GET /bookings/:id
 Retrieves detailed booking information. Strictly checks ownership (`booking.userId === req.user.id`).
 
 - **Auth Required**: Yes (`Authorization: Bearer <token>`)
@@ -665,7 +709,7 @@ Retrieves detailed booking information. Strictly checks ownership (`booking.user
 
 ---
 
-### 11. POST /bookings/:id/cancel
+### 12. POST /bookings/:id/cancel
 Cancels an active booking (`PENDING` or `CONFIRMED` -> `CANCELLED`). Calling cancel on an already `CANCELLED` booking returns a clean HTTP 200 response.
 
 - **Auth Required**: Yes (`Authorization: Bearer <token>`)
@@ -695,7 +739,7 @@ Cancels an active booking (`PENDING` or `CONFIRMED` -> `CANCELLED`). Calling can
 
 ---
 
-### 12. POST /payments
+### 13. POST /payments
 Simulates payment for a `PENDING` booking. Executes atomic transaction (`prisma.$transaction`) to create Payment record and update Booking status (`CONFIRMED` on SUCCESS, `FAILED` on FAILED).
 
 - **Auth Required**: Yes (`Authorization: Bearer <token>`)
@@ -739,7 +783,7 @@ Simulates payment for a `PENDING` booking. Executes atomic transaction (`prisma.
 
 ---
 
-### 13. POST /payments/webhook
+### 14. POST /payments/webhook
 Idempotent payment webhook receiver. Checks/inserts `WebhookEvent` by unique `eventId`. Duplicate `eventId` payloads safely return HTTP 200 without duplicate execution.
 
 - **Auth Required**: No
@@ -802,16 +846,20 @@ Idempotent payment webhook receiver. Checks/inserts `WebhookEvent` by unique `ev
    - If `simulateFailure: true` is explicitly passed, the outcome is deterministically set to `FAILED`. If `simulateFailure: false` is explicitly passed, the outcome is forced to `SUCCESS`.
 2. **Access Control Model**:
    - Diagnostic Centre and Test write management routes (`POST /centres`, `POST /centres/:id/tests`) and all Booking/Payment routes require valid JWT authentication (`authenticateJWT`).
-   - Read routes (`GET /centres`, `GET /centres/:id`, `GET /tests`) remain public.
-3. **Rate Limiting Enforcement (Bonus Implemented)**:
+   - Read routes (`GET /centres`, `GET /centres/:id`, `GET /centres/:id/tests`, `GET /tests`) remain public.
+3. **Booking Status Lifecycle & Transition Rules**:
+   - Four distinct statuses: `PENDING` (initial booking creation), `CONFIRMED` (payment success), `FAILED` (payment failure), and `CANCELLED` (explicit user cancellation).
+   - Cancellation (`POST /bookings/:id/cancel`) is permitted from `PENDING` or `CONFIRMED` states.
+   - Re-cancelling an already `CANCELLED` booking returns a clean HTTP 200 response; cancelling a `FAILED` booking returns an HTTP 409 Conflict error.
+   - Payments (`POST /payments`) are only accepted for `PENDING` bookings; payment attempts on `CONFIRMED`, `FAILED`, or `CANCELLED` bookings return an HTTP 409 Conflict.
+4. **Consistent Pagination Model**:
+   - List endpoints (`GET /centres`, `GET /centres/:id/tests`, `GET /tests`, `GET /bookings`) accept `page` and `pageSize` (with `limit` / `offset` support) validated via Zod (`page >= 1`, `pageSize` default 10, max 100).
+   - Responses follow a standard `{ success, message, data: [...], pagination: { page, pageSize, total, totalItems, totalPages } }` format. Out-of-range pages return `data: []` with valid pagination metadata.
+5. **Rate Limiting Enforcement (Bonus Implemented)**:
    - Configured `express-rate-limit` on sensitive write endpoints: `POST /auth/login` (10 requests per 15 minutes per IP) and `POST /payments/webhook` (60 requests per minute per IP). Returns standardized HTTP 429 error shape when exceeded.
-4. **Database Indexes Implemented**:
+6. **Database Indexes Implemented**:
    - Added composite index `Booking(userId, status)` for fast booking queries and single index `Payment(providerReferenceId)` in Prisma schema.
-5. **Booking Cancellation Rules**:
-   - Cancellation is permitted if status is `PENDING` or `CONFIRMED`.
-   - Calling cancel on an already `CANCELLED` booking returns a clean HTTP 200 response rather than throwing an unhandled error.
-   - Calling cancel on a `FAILED` booking returns an HTTP 409 Conflict error.
-6. **Security & Password Specifications**:
+7. **Security & Password Specifications**:
    - User passwords are required to be at least 6 characters long and are hashed using Bcrypt with 10 salt rounds.
    - JWT tokens are signed using HMAC SHA-256 with a 1-day (`1d`) expiration.
 
@@ -826,13 +874,13 @@ Idempotent payment webhook receiver. Checks/inserts `WebhookEvent` by unique `ev
 3. **Refresh Tokens & JWT Blacklisting**:
    - Implement short-lived access tokens (15 mins) paired with HTTP-only refresh tokens stored in Redis for token revocation on logout.
 4. **End-to-End Automated Testing**:
-   - Expand the Jest/Supertest suite with Playwright / Cypress end-to-end browser integration tests.
+   - Expand the 52-test Jest/Supertest suite with Playwright / Cypress end-to-end browser integration tests.
 
 ---
 
 ## 🧪 Running Automated Tests
 
-The repository contains a full test suite powered by **Jest** and **Supertest** (38 unit & integration tests, 100% pass rate).
+The repository contains a full test suite powered by **Jest** and **Supertest** (52 unit & integration tests, 100% pass rate).
 
 ```bash
 npm test

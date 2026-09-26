@@ -6,6 +6,7 @@ const {
   createCentreSchema,
   getCentresSchema,
   addTestSchema,
+  getCentreTestsSchema,
 } = require('../schemas/centre.schema');
 
 const router = express.Router();
@@ -78,6 +79,30 @@ router.get('/:id', centresController.getCentreById);
 /**
  * @swagger
  * /centres/{id}/tests:
+ *   get:
+ *     summary: List tests belonging to a diagnostic centre with pagination
+ *     tags: [Diagnostic Centres]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Paginated list of tests for the centre
+ *       404:
+ *         description: Centre not found
  *   post:
  *     summary: Add a diagnostic test to a centre
  *     tags: [Diagnostic Centres]
@@ -107,6 +132,7 @@ router.get('/:id', centresController.getCentreById);
  *       404:
  *         description: Centre not found
  */
+router.get('/:id/tests', validate(getCentreTestsSchema, 'query'), centresController.getCentreTests);
 router.post('/:id/tests', authenticateJWT, validate(addTestSchema), centresController.addTestToCentre);
 
 module.exports = router;

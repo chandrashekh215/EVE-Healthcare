@@ -22,6 +22,15 @@ const getTestsSchema = z.object({
   name: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const getCentreTestsSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
 });
 
 module.exports = {
@@ -29,4 +38,5 @@ module.exports = {
   getCentresSchema,
   addTestSchema,
   getTestsSchema,
+  getCentreTestsSchema,
 };
